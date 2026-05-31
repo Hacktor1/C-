@@ -17,7 +17,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Microsoft.Win32;
 using MessageBox = System.Windows.MessageBox;
-using WpfColor = System.Windows.Media.Color;   // <-- jednoznačný alias
+using WpfColor = System.Windows.Media.Color;
 
 namespace RedVision
 {
@@ -102,7 +102,9 @@ namespace RedVision
                 ["EmptyKey"] = "Activation key cannot be empty. Defaulting to 'R'.",
                 ["Version"] = "Version 1.2.0",
                 ["Stats"] = "Total activations: {0}",
-                ["UpdateAvailable"] = "New version {0} available!"
+                ["UpdateAvailable"] = "New version {0} available!",
+                ["MagInitFail"] = "Failed to initialize magnification API. Application will exit.",
+                ["ColorEffectFail"] = "Failed to apply color effect."
             },
             ["CS"] = new Dictionary<string, string>
             {
@@ -127,7 +129,9 @@ namespace RedVision
                 ["EmptyKey"] = "Aktivační klávesa nemůže být prázdná. Nastavuji výchozí 'R'.",
                 ["Version"] = "Verze 1.2.0",
                 ["Stats"] = "Celkem aktivací: {0}",
-                ["UpdateAvailable"] = "Nová verze {0} je k dispozici!"
+                ["UpdateAvailable"] = "Nová verze {0} je k dispozici!",
+                ["MagInitFail"] = "Selhala inicializace magnification API. Aplikace bude ukončena.",
+                ["ColorEffectFail"] = "Selhalo aplikování barevného efektu."
             }
         };
 
@@ -154,7 +158,7 @@ namespace RedVision
 
             if (!MagInitialize())
             {
-                MessageBox.Show("Failed to initialize magnification API. Application will exit.", "Fatal Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowCustomError(L("MagInitFail"));
                 System.Windows.Application.Current.Shutdown();
                 return;
             }
@@ -183,6 +187,29 @@ namespace RedVision
             if (BtnToggleRed.Template != null)
                 _txtMainBtn = BtnToggleRed.Template.FindName("TxtMainBtn", BtnToggleRed) as TextBlock;
         }
+
+        #region Custom Error Overlay
+        private void ShowCustomError(string message, string title = null)
+        {
+            if (title == null) title = L("Error");
+            ErrorTitle.Text = title;
+            ErrorMessage.Text = message;
+
+            ErrorOverlay.Visibility = Visibility.Visible;
+            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150));
+            ErrorOverlay.BeginAnimation(OpacityProperty, fadeIn);
+        }
+
+        private void BtnErrorOk_Click(object sender, RoutedEventArgs e)
+        {
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150));
+            fadeOut.Completed += (s, a) =>
+            {
+                ErrorOverlay.Visibility = Visibility.Collapsed;
+            };
+            ErrorOverlay.BeginAnimation(OpacityProperty, fadeOut);
+        }
+        #endregion
 
         #region System Tray & Pipe
         private void InitSystemTray()
@@ -400,7 +427,7 @@ namespace RedVision
             if (string.IsNullOrWhiteSpace(TxtKey.Text))
             {
                 TxtKey.Text = "R";
-                MessageBox.Show(L("EmptyKey"), "RedVision", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowCustomError(L("EmptyKey"));
             }
             RegisterCustomHotkey();
             SaveSettings();
@@ -462,7 +489,7 @@ namespace RedVision
 
             if (!MagSetFullscreenColorEffect(ref matrix))
             {
-                MessageBox.Show("Failed to apply color effect.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowCustomError(L("ColorEffectFail"));
                 BtnToggleRed.IsChecked = !isActive;
                 return;
             }
@@ -546,7 +573,7 @@ namespace RedVision
                 string msg = _isUpdateAvailable
                     ? string.Format(L("UpdateAvailable"), _latestVersion)
                     : L("Latest");
-                MessageBox.Show(msg, "RedVision", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowCustomError(msg);  // použijeme vlastní hlášku
             }
         }
 
@@ -589,7 +616,7 @@ del ""%~f0""
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Update error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowCustomError($"Update error: {ex.Message}");
                 BtnUpdate.IsEnabled = true;
                 SetUpdateButtonUI();
             }
