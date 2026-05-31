@@ -279,6 +279,27 @@
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
+
+                <!-- CUSTOM ERROR OVERLAY -->
+                <Grid x:Name="ErrorOverlay" Visibility="Collapsed" Opacity="0" Background="#AA000000">
+                    <Border Background="#1E1E1E" CornerRadius="12" BorderBrush="#333333" BorderThickness="1"
+                            Width="300" Height="160" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="20">
+                            <TextBlock x:Name="ErrorTitle" Text="Error" Foreground="#FF453A" FontSize="16" FontWeight="Bold" Margin="0,0,0,15" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="ErrorMessage" Text="" Foreground="#CCCCCC" FontSize="13" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,20"/>
+                            <Button x:Name="BtnErrorOk" Content="OK" Width="80" Height="30" Foreground="White" Background="#444444"
+                                    Cursor="Hand" Click="BtnErrorOk_Click" BorderThickness="0" HorizontalAlignment="Center">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="15">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Grid>
         </Grid>
     </Border>
