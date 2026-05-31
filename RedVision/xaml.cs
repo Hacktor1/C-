@@ -1,0 +1,306 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Interop;
+
+// Definice aliasu, která řeší nejednoznačnost mezi WPF a Windows Forms MessageBoxem
+using MessageBox = System.Windows.MessageBox;
+
+namespace RedVision
+{
+    public partial class MainWindow : Window
+    {
+        // --- WINDOWS API PRO FILTR ---
+        [DllImport("magnification.dll")] public static extern bool MagInitialize();
+        [DllImport("magnification.dll")] public static extern bool MagUninitialize();
+        [DllImport("magnification.dll")] public static extern bool MagSetFullscreenColorEffect(ref MAGCOLORMATRIX pEffect);
+
+        // --- WINDOWS API PRO HOTKEY ---
+        [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        private const int HOTKEY_ID = 9000;
+        private const int WM_HOTKEY = 0x0312;
+
+        private const uint MOD_ALT = 0x0001;
+        private const uint MOD_CONTROL = 0x0002;
+        private const uint MOD_SHIFT = 0x0004;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MAGCOLORMATRIX { [MarshalAs(UnmanagedType.ByValArray, SizeConst = 25)] public float[] transform; }
+
+        private static readonly MAGCOLORMATRIX RedMatrix = new MAGCOLORMATRIX { transform = new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f } };
+        private static readonly MAGCOLORMATRIX IdentityMatrix = new MAGCOLORMATRIX { transform = new float[] { 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f, 0f, 1f } };
+
+        private System.Windows.Forms.NotifyIcon _notifyIcon;
+        private IntPtr _windowHandle;
+        private HwndSource _hwndSource;
+        private bool _isExplicitClose = false;
+
+        // --- KONFIGURACE ONLINE AKTUALIZACÍ ---
+        private string _onlineVersion = "";
+        private const string AktualniVerze = "1.2.0";
+        private const string UrlVerze = "https://tvojedomena.cz/redvision/version.txt";
+        private const string UrlProgramu = "https://tvojedomena.cz/redvision/RedVision.exe";
+
+        private bool _isUpdateAvailable = false;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+            MagInitialize();
+            InitSystemTray();
+        }
+
+        private void InitSystemTray()
+        {
+            _notifyIcon = new System.Windows.Forms.NotifyIcon();
+            _notifyIcon.Icon = System.Drawing.SystemIcons.Application;
+            _notifyIcon.Visible = true;
+            _notifyIcon.Text = "RedVision";
+
+            _notifyIcon.DoubleClick += (s, e) => { ShowWindow(); };
+
+            var contextMenu = new System.Windows.Forms.ContextMenuStrip();
+            contextMenu.Items.Add("Otevřít rozhraní", null, (s, e) => ShowWindow());
+            contextMenu.Items.Add("Ukončit aplikaci", null, (s, e) => ExitApplication());
+            _notifyIcon.ContextMenuStrip = contextMenu;
+        }
+
+        private void ShowWindow()
+        {
+            this.Show();
+            this.WindowState = WindowState.Normal;
+            this.Activate();
+        }
+
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            MainPanel.Visibility = Visibility.Collapsed;
+            SettingsPanel.Visibility = Visibility.Visible;
+        }
+
+        private void BtnBack_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsPanel.Visibility = Visibility.Collapsed;
+            MainPanel.Visibility = Visibility.Visible;
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            _windowHandle = new WindowInteropHelper(this).Handle;
+            _hwndSource = HwndSource.FromHwnd(_windowHandle);
+            _hwndSource.AddHook(HwndHook);
+
+            RegisterCustomHotkey();
+
+            // Spustíme automatickou kontrolu hned na startu (nebo když se okno načte)
+            _ = CheckForUpdatesAsync(isAutomatic: true);
+        }
+
+        // --- ZDE JE NAPOJEN TEXTBOX NAMÍSTO COMBOBOXU ---
+        private void RegisterCustomHotkey()
+        {
+            if (_windowHandle == IntPtr.Zero) return;
+
+            UnregisterHotKey(_windowHandle, HOTKEY_ID);
+
+            uint modifiers = 0;
+            if (ChkCtrl.IsChecked == true) modifiers |= MOD_CONTROL;
+            if (ChkAlt.IsChecked == true) modifiers |= MOD_ALT;
+            if (ChkShift.IsChecked == true) modifiers |= MOD_SHIFT;
+
+            if (TxtKey != null && !string.IsNullOrWhiteSpace(TxtKey.Text))
+            {
+                string keyStr = TxtKey.Text.Trim();
+
+                if (Enum.TryParse(keyStr, true, out System.Windows.Input.Key parsedKey))
+                {
+                    uint vk = (uint)System.Windows.Input.KeyInterop.VirtualKeyFromKey(parsedKey);
+                    RegisterHotKey(_windowHandle, HOTKEY_ID, modifiers, vk);
+                }
+            }
+        }
+
+        private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            {
+                BtnToggleRed.IsChecked = !BtnToggleRed.IsChecked;
+                ApplyColorFilter();
+                handled = true;
+            }
+            return IntPtr.Zero;
+        }
+
+        private void HotkeyChanged(object sender, RoutedEventArgs e)
+        {
+            if (IsInitialized) RegisterCustomHotkey();
+        }
+
+        private void TxtKey_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (IsInitialized) RegisterCustomHotkey();
+        }
+
+        private void BtnToggleRed_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyColorFilter();
+        }
+
+        private void ApplyColorFilter()
+        {
+            if (BtnToggleRed.IsChecked == true)
+            {
+                MAGCOLORMATRIX matrix = RedMatrix;
+                MagSetFullscreenColorEffect(ref matrix);
+
+                TxtStatus.Text = "Červený režim AKTIVNÍ";
+                TxtStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 69, 58));
+                StateDot.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 209, 88));
+            }
+            else
+            {
+                MAGCOLORMATRIX matrix = IdentityMatrix;
+                MagSetFullscreenColorEffect(ref matrix);
+
+                TxtStatus.Text = "Červený režim vypnut";
+                TxtStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(170, 170, 170));
+                StateDot.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 69, 58));
+            }
+        }
+
+        // --- KONTROLA VERZE (Jen barvy tlačítka a ToolTip, text ikony se nemění) ---
+        private async Task CheckForUpdatesAsync(bool isAutomatic)
+        {
+            try
+            {
+                using (HttpClient client = new HttpClient())
+                {
+                    _onlineVersion = (await client.GetStringAsync(UrlVerze)).Trim();
+                }
+
+                if (Version.TryParse(_onlineVersion, out Version online) && Version.TryParse(AktualniVerze, out Version current))
+                {
+                    if (online > current)
+                    {
+                        // Aktualizace je dostupná -> Zelená barva
+                        _isUpdateAvailable = true;
+                        BtnUpdate.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(48, 209, 88));
+                        BtnUpdate.ToolTip = $"Dostupná aktualizace na verzi {_onlineVersion} (Klikněte pro instalaci)";
+                        return;
+                    }
+                }
+
+                // Není dostupná (stejná verze) -> Šedá barva
+                _isUpdateAvailable = false;
+                BtnUpdate.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(120, 120, 120));
+                BtnUpdate.ToolTip = "Máte nainstalovanou nejnovější verzi (Klikněte pro kontrolu)";
+
+                if (!isAutomatic)
+                {
+                    MessageBox.Show("Máte nainstalovanou nejnovější verzi.", "Aktualizace", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch
+            {
+                // Chyba serveru -> Šedá barva
+                _isUpdateAvailable = false;
+                BtnUpdate.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(120, 120, 120));
+                BtnUpdate.ToolTip = "Nepodařilo se spojit se serverem (Klikněte pro opakování)";
+
+                if (!isAutomatic)
+                {
+                    MessageBox.Show("Nepodařilo se spojit s aktualizačním serverem.", "Chyba", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
+        private async void BtnUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            // Pokud aktualizace není, zkusíme ruční re-kontrolu
+            if (!_isUpdateAvailable)
+            {
+                BtnUpdate.IsEnabled = false;
+                await CheckForUpdatesAsync(isAutomatic: false);
+                BtnUpdate.IsEnabled = true;
+                return;
+            }
+
+            // Pokud je zelené a klikne se na něj -> Instalujeme
+            BtnUpdate.IsEnabled = false;
+            BtnUpdate.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 159, 10)); // Změníme na oranžovou (Stahuje se)
+            BtnUpdate.ToolTip = "Stahování aktualizace...";
+
+            try
+            {
+                string cestaKApp = Environment.ProcessPath ?? "";
+                if (string.IsNullOrEmpty(cestaKApp)) return;
+
+                string slozkaApp = Path.GetDirectoryName(cestaKApp) ?? "";
+                string novySouborTmp = Path.Combine(slozkaApp, "RedVision.new");
+
+                using (HttpClient client = new HttpClient())
+                {
+                    byte[] data = await client.GetByteArrayAsync(UrlProgramu);
+                    File.WriteAllBytes(novySouborTmp, data);
+                }
+
+                string batCesta = Path.Combine(slozkaApp, "updater.bat");
+                string batObsah = $@"
+@echo off
+timeout /t 1 /nobreak > NUL
+del ""{cestaKApp}""
+move /y ""{novySouborTmp}"" ""{cestaKApp}""
+start """" ""{cestaKApp}""
+del ""%~f0""
+";
+                File.WriteAllText(batCesta, batObsah);
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = batCesta,
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                });
+
+                ExitApplication();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Instalace selhala: {ex.Message}", "Chyba", MessageBoxButton.OK, MessageBoxImage.Error);
+                BtnUpdate.IsEnabled = true;
+                await CheckForUpdatesAsync(isAutomatic: true);
+            }
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            if (!_isExplicitClose)
+            {
+                e.Cancel = true;
+                this.Hide();
+            }
+            base.OnClosing(e);
+        }
+
+        private void ExitApplication()
+        {
+            _isExplicitClose = true;
+
+            MAGCOLORMATRIX matrix = IdentityMatrix;
+            MagSetFullscreenColorEffect(ref matrix);
+            MagUninitialize();
+
+            if (_windowHandle != IntPtr.Zero) UnregisterHotKey(_windowHandle, HOTKEY_ID);
+            if (_notifyIcon != null) _notifyIcon.Dispose();
+
+            this.Close();
+        }
+    }
+}
