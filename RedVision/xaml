@@ -1,7 +1,7 @@
 <Window x:Class="RedVision.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="RedVision" Height="480" Width="380"
+        Title="RedVision" Height="500" Width="400"
         Background="#181818" Foreground="White" ResizeMode="NoResize" 
         WindowStartupLocation="CenterScreen"
         WindowStyle="None" AllowsTransparency="True" MouseDown="Window_MouseDown">
@@ -13,7 +13,6 @@
             <Setter Property="Padding" Value="5,2"/>
         </Style>
 
-        <!-- Minimalistický posuvník -->
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Width" Value="8"/>
@@ -51,7 +50,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Vlastní titulek okna -->
+            <!-- TITLE BAR -->
             <Grid Grid.Row="0" Background="Transparent">
                 <Button x:Name="BtnClose" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" 
                         Foreground="#888888" FontSize="11" Width="45" Height="40" 
@@ -73,10 +72,10 @@
                 </Button>
             </Grid>
 
-            <!-- Hlavní obsah -->
+            <!-- CONTENT -->
             <Grid Grid.Row="1" Margin="25,0,25,25">
 
-                <!-- HLAVNÍ PANEL -->
+                <!-- MAIN PANEL -->
                 <Grid x:Name="MainPanel" Visibility="Visible" Opacity="1">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -109,7 +108,7 @@
                             <TextBlock x:Name="TxtStatus" Text="Red Mode disabled" Foreground="#AAAAAA" FontSize="14" FontWeight="Medium"/>
                         </StackPanel>
 
-                        <!-- Animované tlačítko (animace vždy zapnuté) -->
+                        <!-- ANIMATED TOGGLE -->
                         <ToggleButton x:Name="BtnToggleRed" Click="BtnToggleRed_Click" Cursor="Hand" Width="180" Height="180">
                             <ToggleButton.Template>
                                 <ControlTemplate TargetType="ToggleButton">
@@ -179,7 +178,7 @@
                                Foreground="#666666" FontSize="12" TextAlignment="Center"/>
                 </Grid>
 
-                <!-- PANEL NASTAVENÍ -->
+                <!-- SETTINGS PANEL -->
                 <Grid x:Name="SettingsPanel" Visibility="Collapsed" Opacity="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -208,33 +207,35 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,-15,0" Padding="0,0,10,0">
                         <StackPanel>
 
+                            <!-- LANGUAGE & STARTUP -->
                             <Border Background="#222222" CornerRadius="10" Padding="15" BorderBrush="#2D2D2D" BorderThickness="1" Margin="0,0,0,15">
                                 <StackPanel>
                                     <TextBlock x:Name="TxtDisplayCategory" Text="Interface &amp; Display" FontSize="13" FontWeight="Bold" Foreground="#888888" Margin="0,0,0,12"/>
 
                                     <DockPanel Margin="0,0,0,12">
                                         <TextBlock x:Name="TxtLangLabel" Text="Language:" VerticalAlignment="Center" Foreground="#CCCCCC"/>
-                                        <ComboBox x:Name="CmbLang" Height="26" Width="90" HorizontalAlignment="Right" SelectionChanged="CmbLang_SelectionChanged">
-                                            <ComboBoxItem Content="English" IsSelected="True"/>
-                                            <ComboBoxItem Content="Čeština"/>
-                                            <ComboBoxItem Content="Deutsch"/>
-                                            <ComboBoxItem Content="Français"/>
-                                            <ComboBoxItem Content="Español"/>
-                                            <ComboBoxItem Content="Italiano"/>
-                                            <ComboBoxItem Content="Português"/>
-                                            <ComboBoxItem Content="Русский"/>
-                                            <ComboBoxItem Content="日本語"/>
-                                            <ComboBoxItem Content="中文(简体)"/>
-                                            <ComboBoxItem Content="한국어"/>
-                                            <ComboBoxItem Content="العربية"/>
-                                            <ComboBoxItem Content="हिन्दी"/>
+                                        <ComboBox x:Name="CmbLang" Height="26" Width="110" HorizontalAlignment="Right" SelectionChanged="CmbLang_SelectionChanged">
+                                            <ComboBoxItem Content="English" Tag="EN" IsSelected="True"/>
+                                            <ComboBoxItem Content="Čeština" Tag="CS"/>
+                                            <ComboBoxItem Content="Deutsch" Tag="DE"/>
+                                            <ComboBoxItem Content="Français" Tag="FR"/>
+                                            <ComboBoxItem Content="Español" Tag="ES"/>
+                                            <ComboBoxItem Content="Italiano" Tag="IT"/>
+                                            <ComboBoxItem Content="Português" Tag="PT"/>
+                                            <ComboBoxItem Content="Русский" Tag="RU"/>
+                                            <ComboBoxItem Content="日本語" Tag="JA"/>
+                                            <ComboBoxItem Content="中文(简体)" Tag="ZH"/>
+                                            <ComboBoxItem Content="한국어" Tag="KO"/>
+                                            <ComboBoxItem Content="العربية" Tag="AR"/>
+                                            <ComboBoxItem Content="हिन्दी" Tag="HI"/>
                                         </ComboBox>
                                     </DockPanel>
 
-                                    <!-- CheckBox Smooth Animations byl odstraněn -->
+                                    <CheckBox x:Name="ChkStartup" Content="Run at Windows startup" Foreground="#CCCCCC" IsChecked="False" Checked="ChkStartup_Changed" Unchecked="ChkStartup_Changed"/>
                                 </StackPanel>
                             </Border>
 
+                            <!-- HOTKEY -->
                             <Border Background="#222222" CornerRadius="10" Padding="15" BorderBrush="#2D2D2D" BorderThickness="1" Margin="0,0,0,15">
                                 <StackPanel>
                                     <TextBlock x:Name="TxtHotkeyCategory" Text="Global Hotkey" FontSize="13" FontWeight="Bold" Foreground="#888888" Margin="0,0,0,12"/>
@@ -250,15 +251,16 @@
                                         <TextBox x:Name="TxtKey" Text="R" Height="28" Width="40" HorizontalAlignment="Right" 
                                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center" FontWeight="Bold"
                                                  Background="#181818" Foreground="White" BorderBrush="#444444" BorderThickness="1" 
-                                                 TextChanged="TxtKey_TextChanged" MaxLength="1" CharacterCasing="Upper"/>
+                                                 TextChanged="TxtKey_TextChanged" MaxLength="1" CharacterCasing="Upper" LostFocus="TxtKey_LostFocus"/>
                                     </DockPanel>
                                 </StackPanel>
                             </Border>
 
+                            <!-- ABOUT & STATS -->
                             <Border Background="#222222" CornerRadius="10" Padding="15" BorderBrush="#2D2D2D" BorderThickness="1" Margin="0,0,10,15">
                                 <StackPanel>
                                     <TextBlock Text="RedVision Pro" FontSize="14" FontWeight="Bold" Foreground="#EEEEEE" Margin="0,0,0,2"/>
-                                    <TextBlock Text="Verze 1.2.0" Foreground="#666666" FontSize="12" Margin="0,0,0,12"/>
+                                    <TextBlock x:Name="TxtStats" Foreground="#666666" FontSize="12" Margin="0,0,0,12"/>
 
                                     <Button x:Name="BtnUpdate" Content="⬇ Up to date" ToolTip="Check for updates"
                                             Background="#444444" Foreground="White" FontWeight="SemiBold" FontSize="13"
